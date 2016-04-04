@@ -12,6 +12,17 @@
         body ...)
      #'(define-syntax id (infix-trans (λ(args ...) body ...) n))]))
 
+(define-syntax (define-syntax/tag-infix stx)
+  (syntax-parse stx
+    [(_ id:id (~or #:prec #:precedence) n
+        #:parse fun
+        #:expand efun)
+     #'(define-syntax id (tag-infix-trans fun n efun))]
+    [(_ (id:id args ...) (~or #:prec #:precedence) n
+        body ...
+        #:expand efun)
+     #'(define-syntax id (tag-infix-trans (λ(args ...) body ...) n efun))]))
+
 (define-syntax (define-syntax/operator stx)
   (syntax-parse stx
     [(_ id:id
@@ -22,5 +33,7 @@
         ...)
      #'(define-syntax id (operator cfun gfun n))]))
 
+
 (provide define-syntax/infix
+         define-syntax/tag-infix
          define-syntax/operator)
