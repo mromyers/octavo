@@ -15,8 +15,19 @@
           [else    (loop (- x 1) (* x y))])))
 
 
-(define-syntax (quote-parsed stx)
+(define-syntax (quote-parsed: stx)
   (syntax-parse stx
     [(_ stuff ...)
      (with-syntax ([stx* (parse-all #'(stuff ...))])
        #'(quote stx*))]))
+
+
+(define-syntax (parse: stx)
+  (syntax-parse stx
+    [(_ stuff ...)(parse-all #'(stuff ...))]))
+
+(provide ! parse: quote-parsed:
+ (rename-out [add +]
+             [sub -]
+             [mult *]
+             [div /]))

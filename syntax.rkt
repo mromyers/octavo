@@ -4,16 +4,16 @@
 (provide
  ;; from parse.rkt
  parse parse-all
+ parse-cmp
  prec-cmp
+ with-parse-bindings
+ parse-def-ctx
+ 
  drop-token get-cmp
  get-< get-<=
  get-none get-first
  ;; local
  )
-
-
-
-
 
 
 (define (split-next s lst stx)

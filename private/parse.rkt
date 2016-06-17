@@ -6,7 +6,8 @@
 
 ;; misc utility
 (define (id-val t)
-  (if (identifier? t) (syntax-local-value t (λ()#f)) #f))
+  (syntax-local-value t (λ()#f)))
+
 (define (replace-stx-car stx a)
   (define rst (cdr (syntax-e stx)))
   (datum->syntax stx (cons a rst)))
@@ -23,7 +24,7 @@
   (make-struct-type-property 'precedence))
 
 ;; parsing
-(provide parse parse-all)
+(provide parse parse-cmp parse-all)
 
 (define (parse e stx dom?)
   (if (stx-null? stx) (values e stx)
@@ -44,7 +45,9 @@
               (parse-cmp e* stx* R m))))))
 
 (define parse-all
-  (case-lambda
+  ;; note: parse-all added only for efficiency.
+  ;; (parse-all [e #f] stx) = (parse e stx (λ(x) #f))
+  (case-lambda 
     [(  stx)(-parse-all #f stx)]
     [(e stx)(-parse-all  e stx)]))
 (define (-parse-all e stx)
@@ -63,18 +66,26 @@
   (define a (car (syntax-e stx)))
   (syntax-parse a
     [(t:id z ...)
-     (define v (syntax-local-value #'t (λ() #f) (parse-def-ctx)))
-     (cond [(or (tag-token? v) (is-intro-tag? #'t))
+     (define a* (add-def-ctx #'t))
+     (define v (syntax-local-value a* (λ() #f)))
+     (cond [(or (tag-token? v) (is-intro-tag? a*))
             (values #'t v stx)]
            [else (head-tok+val (replace-stx-car stx (add-tag a)))])]
     [(x ...) (head-tok+val (replace-stx-car stx (add-tag a)))]
     [t:id
-     (define v (syntax-local-value a (λ() #f) (parse-def-ctx)))
-     (values a v stx)]
+     (define a* (add-def-ctx a))
+     (define v (syntax-local-value a* (λ() #f)))
+     (values a* v stx)]
     [else (values a #f stx)]))
 
 ;; scopes
+(provide parse-def-ctx)
 (define parse-def-ctx (make-parameter #f))
+
+(define (add-def-ctx id)
+  (define ctx (parse-def-ctx))
+  (cond [ctx  (internal-definition-context-introduce ctx id 'add)]
+        [else id]))
 
 (define (add-tag stx)
   (define t-sym (case (syntax-property stx 'paren-shape)
@@ -85,6 +96,19 @@
 (define (is-intro-tag? t)
   (define intro-tags (set '#%parens '#%brackets '#%braces))
   (set-member? intro-tags (syntax->datum t)))
+
+(provide with-parse-bindings)
+(define-syntax-rule
+  (with-parse-bindings [(x ...) expr]
+    body ...)
+  (parameterize ([parse-def-ctx (bind-parse-syntaxes (list x ...) expr)])
+    body ...))
+
+(define (bind-parse-syntaxes id-list expr)
+  (define ctx (syntax-local-make-definition-context (parse-def-ctx) #f))
+  (syntax-local-bind-syntaxes id-list expr ctx)
+  ctx)
+
 
 ;; general token and defaults
 (provide token-proc token-prec tag-token? token-prec)

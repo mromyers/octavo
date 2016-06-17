@@ -3,7 +3,7 @@
           "../syntax.rkt"
           "../syntax/operator.rkt"
           "../syntax/token.rkt"
-          syntax/parse))
+          syntax/parse)) 
 
 
 (define-syntax (qt-p: stx)
@@ -51,7 +51,6 @@
                 #'(t   r*))]
         [(l r)(with-syntax ([l l][r* (parse-all (drop-token r))])
                 #'(t l r*))]))))
-
 
 (provide qt-p:
          def-op/r def-tag
