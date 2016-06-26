@@ -1,18 +1,40 @@
 #lang racket
-(require (for-syntax "../private/parse.rkt"
+(require (for-syntax "../syntax.rkt"
                      syntax/parse)
+         (rename-in racket/base
+          [+  add][- sub]
+          [* mult][/ div])
          "../private/sugar.rkt")
 
-(define-rename-operator add  + #:prec 1 #:assoc 'left)
-(define-rename-operator sub  - #:prec 1 #:assoc 'left)
-(define-rename-operator mult * #:prec 2 #:assoc 'left)
-(define-rename-operator div  / #:prec 2 #:assoc 'right)
+(define-operator + add  #:prec 11 #:assoc 'left)
+(define-operator - sub  #:prec 11 #:assoc 'left)
+(define-operator * mult #:prec 12 #:assoc 'left)
+(define-operator / div  #:prec 12 #:assoc 'right)
 
-(define-operator (! l) #:prec 2
-  #:get (get-none)
+(define-operator (! l) #:prec 12
+  #:get get-none
   (let loop ([x l][y 1])
-    (cond [(= x 0) y]
-          [else    (loop (- x 1) (* x y))])))
+    (if (= x 0) y
+        (loop (- x 1) (* x y)))))
+
+(define-syntax/operator #%parens
+  #:tag #:keep-token
+  #:prec 19
+  #:get get-first
+  #:combine
+  (case-lambda
+    [(  r) r]
+    [(l r) (with-syntax ([f l][x (parse-all (drop-token r))])
+             #'(f x))])
+  #:expand
+  (λ(stx)(parse-all (drop-token stx))))
+
+
+(define-infix (=> e stx) #:prec 5
+  (with-parse-bindings [(e) #f]
+    (define-values (body stx*)(parse (drop-token stx) (prec-cmp <= 5)))
+    (with-syntax ([x e][body body])
+      (values #'(λ(x) body) stx*))))
 
 
 (define-syntax (quote-parsed: stx)
@@ -22,12 +44,8 @@
        #'(quote stx*))]))
 
 
-(define-syntax (parse: stx)
+(define-syntax ($ stx)
   (syntax-parse stx
     [(_ stuff ...)(parse-all #'(stuff ...))]))
 
-(provide ! parse: quote-parsed:
- (rename-out [add +]
-             [sub -]
-             [mult *]
-             [div /]))
+

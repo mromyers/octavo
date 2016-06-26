@@ -14,52 +14,38 @@
 
 
 ;; token properties
-(provide prop:token prop:tag-token prop:precedence)
+(provide prop:infix prop:tag-infix)
 
-(define-values (prop:token token? token-ref)
-  (make-struct-type-property 'token))
-(define-values (prop:tag-token tag-token? tag-token-ref)
-  (make-struct-type-property 'tag-token))
-(define-values (prop:precedence has-prec? prec-ref)
-  (make-struct-type-property 'precedence))
+(define-values (prop:infix infix? infix-proc)
+  (make-struct-type-property 'infix))
+(define-values (prop:tag-infix tag-infix? tag-infix-ref)
+  (make-struct-type-property 'tag-infix))
 
 ;; parsing
-(provide parse parse-cmp parse-all)
+(provide parse parse-all)
 
-(define (parse e stx dom?)
-  (if (stx-null? stx) (values e stx)
-      (let-values ([(t v stx+)(head-tok+val stx)])
-        (if (and e (dom? t)) (values e stx)
-            (let-values ([(e* stx*)((token-proc v) v e stx+)])
-              (parse e* stx* dom?))))))
-
-
-(define (parse-cmp e stx R m)
-  ;; note: parse-cmp added only for efficiency.
-  ;; (parse-cmp e stx R m) = (parse e stx (prec-cmp R m))
-  (if (stx-null? stx) (values e stx)
-      (let-values ([(t v stx+)(head-tok+val stx)])
-        (if (and e (has-prec? v) (let ([n ((prec-ref v) v)]) (n . R . m)))
-            (values e stx)
-            (let-values ([(e* stx*)((token-proc v) v e stx+)])
-              (parse-cmp e* stx* R m))))))
+(define parse
+  (case-lambda
+    [(  stx dom?)(parse₀ #f stx dom?)]
+    [(e stx dom?)(parse₀  e stx dom?)]))
 
 (define parse-all
-  ;; note: parse-all added only for efficiency.
-  ;; (parse-all [e #f] stx) = (parse e stx (λ(x) #f))
-  (case-lambda 
-    [(  stx)(-parse-all #f stx)]
-    [(e stx)(-parse-all  e stx)]))
-(define (-parse-all e stx)
+  (case-lambda
+    [(  stx)(parse-all₀ #f stx)]
+    [(e stx)(parse-all₀  e stx)]))
+
+(define (parse₀ e stx dom?)
+  (if (stx-null? stx) (values e stx)
+      (let-values ([(t v stx+)(head-tok+val stx)])
+        (if (and e (dom? t v)) (values e stx)
+            (let-values ([(e* stx*)((token-proc v) v e stx+)])
+              (parse₀ e* stx* dom?))))))
+
+(define (parse-all₀ e stx)
   (if (stx-null? stx) e
       (let*-values ([(t v stx+)(head-tok+val stx)]
                     [(e* stx*) ((token-proc v) v e stx+)])
-          (-parse-all e* stx*))))
-
-(define parse-exp
-  (case-lambda
-    [(  stx)(parse #f stx (prec-cmp < 0))]
-    [(e stx)(parse  e stx (prec-cmp < 0))]))
+          (parse-all₀ e* stx*))))
 
 ;; parsing front end
 (define (head-tok+val stx)
@@ -68,7 +54,7 @@
     [(t:id z ...)
      (define a* (add-def-ctx #'t))
      (define v (syntax-local-value a* (λ() #f)))
-     (cond [(or (tag-token? v) (is-intro-tag? a*))
+     (cond [(or (tag-infix? v) (is-intro-tag? a*))
             (values #'t v stx)]
            [else (head-tok+val (replace-stx-car stx (add-tag a)))])]
     [(x ...) (head-tok+val (replace-stx-car stx (add-tag a)))]
@@ -87,11 +73,16 @@
   (cond [ctx  (internal-definition-context-introduce ctx id 'add)]
         [else id]))
 
-(define (add-tag stx)
-  (define t-sym (case (syntax-property stx 'paren-shape)
-                  [(#f) '#%parens][(#\[) '#%brackets][(#\{) '#%braces]))
-  (datum->syntax stx (cons (datum->syntax stx t-sym)
-                           (syntax-e stx))))
+(define (add-tag a)
+  (datum->syntax a (cons (get-tag a) #;(datum->syntax stx t-sym)
+                         (syntax-e a))))
+
+(define (get-tag a)
+  (datum->syntax
+   a (case (syntax-property a 'paren-shape)
+       [(#f)  '#%parens]
+       [(#\[) '#%brackets]
+       [(#\{) '#%braces])))
 
 (define (is-intro-tag? t)
   (define intro-tags (set '#%parens '#%brackets '#%braces))
@@ -111,9 +102,9 @@
 
 
 ;; general token and defaults
-(provide token-proc token-prec tag-token? token-prec)
+(provide token-proc tag-infix?)
 (define (token-proc v)
-  (if (token? v) (token-ref v) e-fun))
+  (if (infix? v) (infix-proc v) e-fun))
  
 (define (e-fun self e stx)
   (if e (do-jx e stx)
@@ -123,29 +114,3 @@
 (define (do-jx e stx)
   (with-syntax ([e e][(x ...) stx])
     (values #'(e x ...) #'())))
-
-;; precedence
-(provide prec-cmp)
-(define (token-prec v)
-  (if (has-prec? v) ((prec-ref v) v) #f))
-
-(define ((prec-cmp R m) t)
-  (let ([n (token-prec (id-val t))])
-       (and n (n . R . m))))
-
-;; 'get' functions
-(provide drop-token get-cmp
-         get-< get-<=
-         get-none get-first)
-
-(define (drop-token stx)
-  (datum->syntax stx (cdr (syntax-e stx))))
-
-(define ((get-cmp R m) stx)
-  (parse-cmp #f stx R m))
-(define (get-<  m) (get-cmp <  m))
-(define (get-<= m) (get-cmp <= m))
-(define ((get-none) stx) (values #f stx))
-(define ((get-first) stx)
-  (let ([stx-e (syntax-e stx)])
-    (values (car stx-e) (datum->syntax stx (cdr stx-e)))))

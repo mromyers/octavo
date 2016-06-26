@@ -1,12 +1,11 @@
 #lang racket
 (require (for-syntax racket/syntax
                      syntax/parse
-                     "../syntax.rkt"
-                     "../syntax/token.rkt"
-                     "../syntax/operator.rkt"))
+                     "parse.rkt"
+                     "infix.rkt"))
 
-(provide define-syntax/token)
-(define-syntax (define-syntax/token stx)
+(provide define-infix)
+(define-syntax (define-infix stx)
   (define-splicing-syntax-class tok-opt
     [pattern (~seq #:tag)
              #:with (result ...) #'(#:tag #t)]
@@ -16,10 +15,10 @@
              #:with (result ...) #'(#:expand ex)])
   (syntax-parse stx
     [(_ name:id t₁:tok-opt ... proc t₂:tok-opt ...)
-     #'(define-syntax name (make-token proc t₁.result ... ... t₂.result ... ...))]
+     #'(define-syntax name (make-infix proc t₁.result ... ... t₂.result ... ...))]
     [(_ (name:id args ...) t₁:tok-opt ... body ...)
-     #'(define-syntax/token name
-         (make-token (λ(args ...) body ...)
+     #'(define-syntax name
+         (make-infix (λ(args ...) body ...)
                      t₁.result ... ...))]))
 
 (provide define-syntax/operator)
@@ -52,8 +51,8 @@
                               (case association
                                 [('left)  #'(get-<= prec)]
                                 [('right) #'(get-<  prec)]))])
-           #'(define-syntax name (operator #:get get o.result ... ...)))
-         #'(define-syntax name (operator o.result ... ...)))]))
+           #'(define-syntax name (make-operator #:get get o.result ... ...)))
+         #'(define-syntax name (make-operator o.result ... ...)))]))
 
 (provide define-rename-operator)
 (define-syntax (define-rename-operator stx)
@@ -114,3 +113,9 @@
            body ...)
          (define-rename-operator name #:id fun
            opt.result ... ...)))]))
+
+(provide #%parse)
+(define-syntax (#%parse stx)
+  (parse-all (drop-token stx)))
+
+

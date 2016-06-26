@@ -1,5 +1,5 @@
 #lang racket
-(require (for-syntax "../private/parse.rkt")
+(require (for-syntax "../syntax.rkt")
          "util.rkt"
          rackunit)
 
@@ -8,9 +8,9 @@
 
 (def-tok a=> #:precedence 3
   (λ(e stx)
-    (define-values (a* stx+) ((get-first) stx))
+    (define-values (a* stx+) (get-first stx))
     (with-parse-bindings [((datum->syntax a* 'a)) #f]
-      (define-values (e* stx*) (parse-cmp e stx+ < 3))
+      (define-values (e* stx*) (parse e stx+ (prec-cmp < 3)))
       (with-syntax ([e₁ e*])
         (values #'(a=> e₁) stx*)))))
 

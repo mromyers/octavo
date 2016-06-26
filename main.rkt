@@ -1,16 +1,12 @@
 #lang racket/base
-
-(require "private/def.rkt"
+(require "private/sugar.rkt"
          (for-syntax "syntax.rkt"))
 
-
-
-(provide define-syntax/infix
-         define-syntax/tag-infix
-         define-syntax/operator
-         (for-syntax parse parse-all
-                     id-prec
-                     get-< get-<=))
+(provide #%parse
+         define-infix
+         define-syntax/operator define-operator
+         (for-syntax
+          (all-from-out "syntax.rkt")))
 
 
 
