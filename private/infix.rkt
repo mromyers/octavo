@@ -1,6 +1,6 @@
 #lang racket/base
-(require racket/syntax
-         syntax/parse
+(require (for-syntax racket/syntax syntax/parse)
+         racket/syntax syntax/parse
          "parse.rkt")
 
 ;; precedence
@@ -55,7 +55,7 @@
 (define (no-expand-error stx)
   (raise-syntax-error #f
     "You shouldn't be using this as a macro.\
- Also, tell the creator of this to make a better error message."))
+ Also, tell the author they need a better error message."))
 
 
 (provide make-operator make-rename-operator)
@@ -71,12 +71,20 @@
          #:drop-token  [dt #t]
          #:com-cases   [cc #t]
          #:expand      [ex (com->ex com)])
+  (make-infix #:tag tg #:precedence prec #:expand ex
+              (make-operator-proc #:combine   com #:get      get
+                                  #:drop-token dt #:com-cases cc)))
+
+(define (make-operator-proc
+         #:combine     com 
+         #:get         get
+         #:drop-token  [dt #t]
+         #:com-cases   [cc #t])
   (define maybe-drop (if dt drop-token (λ(stx) stx)))
   (define com* (if cc (com-case com) com))
-  (define (proc e stx)
+  (λ(e stx)
     (define-values (e* stx*)(get (maybe-drop stx)))
-    (values (com* e e*) stx*))
-  (make-infix proc #:tag tg #:precedence prec #:expand ex))
+    (values (com* e e*) stx*)))
 
 (define ((com-case com) l r)
   (cond[l    (cond[r    (com l r)]
@@ -98,11 +106,20 @@
          #:wrap-e     [we #f]
          #:ctx        [ctx id]
          #:expand     [ex (replace id)])
+  (make-infix #:precedence prec #:expand ex
+              (make-rename-operator-proc #:id     id #:get get
+                                         #:wrap-e we #:ctx ctx)))
+
+(define (make-rename-operator-proc
+         #:id         id
+         #:get        get
+         #:wrap-e     [we #f]
+         #:ctx        [ctx id])
   (define next (next-e* id ctx we))
-  (define (proc e stx)
+  (λ(e stx)
     (define-values (es* stx*)(get (drop-token stx)))
-    (values (next e es*) stx*))
-  (make-infix proc #:precedence prec #:expand ex))
+    (values (next e es*) stx*)))
+
 
 (define (next-e* id ctx we)
   (define filter-args
@@ -127,4 +144,6 @@
  get-< get-<=
  get-none get-first
  
- make-infix make-operator make-rename-operator)
+ make-infix
+ make-operator-proc make-rename-operator-proc
+ make-operator make-rename-operator)

@@ -29,6 +29,8 @@
   #:expand
   (λ(stx)(parse-all (drop-token stx))))
 
+(define-operator #%jx mult #:prec 12 #:assoc 'left)
+
 
 (define-infix (=> e stx) #:prec 5
   (with-parse-bindings [(e) #f]

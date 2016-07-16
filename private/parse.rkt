@@ -24,31 +24,31 @@
 ;; parsing
 (provide parse parse-all)
 
+
 (define parse
+  ;; Pretend this reads as (parse [e #f] stx dom?)
   (case-lambda
     [(  stx dom?)(parse₀ #f stx dom?)]
     [(e stx dom?)(parse₀  e stx dom?)]))
 
-(define parse-all
-  (case-lambda
-    [(  stx)(parse-all₀ #f stx)]
-    [(e stx)(parse-all₀  e stx)]))
-
 (define (parse₀ e stx dom?)
+  ;; Parse stx with e as the already parsed (left hand) expression, until
+  ;; stx is empty, or the head token/value of stx satisfies dom?
   (if (stx-null? stx) (values e stx)
       (let-values ([(t v stx+)(head-tok+val stx)])
-        (if (and e (dom? t v)) (values e stx)
+        (if (and e (dom? . [t v])) (values e stx)
             (let-values ([(e* stx*)((token-proc v) v e stx+)])
               (parse₀ e* stx* dom?))))))
 
-(define (parse-all₀ e stx)
-  (if (stx-null? stx) e
-      (let*-values ([(t v stx+)(head-tok+val stx)]
-                    [(e* stx*) ((token-proc v) v e stx+)])
-          (parse-all₀ e* stx*))))
+(define parse-all
+  ;; Pretend this reads as (parse-all [e #f] stx)
+  (case-lambda
+    [(  stx) (let-values ([(e* stx*) (parse   stx (λ(t v) #f))]) e*)]
+    [(e stx) (let-values ([(e* stx*) (parse e stx (λ(t v) #f))]) e*)]))
 
-;; parsing front end
 (define (head-tok+val stx)
+  ;; parsing front end - returns what will be used as the head token
+  ;; its local value for parsing purposes. 
   (define a (car (syntax-e stx)))
   (syntax-parse a
     [(t:id z ...)
@@ -107,10 +107,22 @@
   (if (infix? v) (infix-proc v) e-fun))
  
 (define (e-fun self e stx)
-  (if e (do-jx e stx)
+  (if e (values e (do-jx e stx))
       (with-syntax ([(a x ...) stx])
         (values #'a #'(x ...)))))
-
+#;
 (define (do-jx e stx)
   (with-syntax ([e e][(x ...) stx])
     (values #'(e x ...) #'())))
+
+(define (do-jx e stx)
+  (define (starts-with-jx? stx)
+    (syntax-parse stx
+      [() #f]
+      [((~datum #%jx) x ...) #t]
+      [else #f]))
+  (if (starts-with-jx? stx)
+      (raise-syntax-error #f "#%jx undefined")
+      (let* ([lst (syntax-e stx)]
+             [jx (datum->syntax (car lst) '#%jx )])
+        (datum->syntax stx (cons jx lst)))))
