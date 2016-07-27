@@ -1,30 +1,10 @@
 #lang racket/base
-(require racket/set
-         racket/syntax
-         syntax/parse
-         syntax/stx)
-
-;; misc utility
-(define (id-val t)
-  (syntax-local-value t (λ()#f)))
-
-(define (replace-stx-car stx a)
-  (define rst (cdr (syntax-e stx)))
-  (datum->syntax stx (cons a rst)))
-
-
-;; token properties
-(provide prop:infix prop:tag-infix)
-
-(define-values (prop:infix infix? infix-proc)
-  (make-struct-type-property 'infix))
-(define-values (prop:tag-infix tag-infix? tag-infix-ref)
-  (make-struct-type-property 'tag-infix))
+(require racket/syntax syntax/parse syntax/stx
+         racket/set
+         "token.rkt")
 
 ;; parsing
 (provide parse parse-all)
-
-
 (define parse
   ;; Pretend this reads as (parse [e #f] stx dom?)
   (case-lambda
@@ -37,7 +17,7 @@
   (if (stx-null? stx) (values e stx)
       (let-values ([(t v stx+)(head-tok+val stx)])
         (if (and e (dom? . [t v])) (values e stx)
-            (let-values ([(e* stx*)((token-proc v) v e stx+)])
+            (let-values ([(e* stx*) (token-app v e stx+)])
               (parse₀ e* stx* dom?))))))
 
 (define parse-all
@@ -54,7 +34,7 @@
     [(t:id z ...)
      (define a* (add-def-ctx #'t))
      (define v (syntax-local-value a* (λ() #f)))
-     (cond [(or (tag-infix? v) (is-intro-tag? a*))
+     (cond [(or (tag-infix-transformer? v) (is-intro-tag? a*))
             (values #'t v stx)]
            [else (head-tok+val (replace-stx-car stx (add-tag a)))])]
     [(x ...) (head-tok+val (replace-stx-car stx (add-tag a)))]
@@ -74,8 +54,8 @@
         [else id]))
 
 (define (add-tag a)
-  (datum->syntax a (cons (get-tag a) #;(datum->syntax stx t-sym)
-                         (syntax-e a))))
+  (datum->syntax
+   a (cons (get-tag a) (syntax-e a))))
 
 (define (get-tag a)
   (datum->syntax
@@ -102,18 +82,12 @@
 
 
 ;; general token and defaults
-(provide token-proc tag-infix?)
-(define (token-proc v)
-  (if (infix? v) (infix-proc v) e-fun))
- 
-(define (e-fun self e stx)
-  (if e (values e (do-jx e stx))
-      (with-syntax ([(a x ...) stx])
-        (values #'a #'(x ...)))))
-#;
-(define (do-jx e stx)
-  (with-syntax ([e e][(x ...) stx])
-    (values #'(e x ...) #'())))
+(define (token-app v e stx)
+  (if (infix-transformer? v)
+      ((infix-transformer v) v e stx)
+      (if e (values e (do-jx e stx))
+          (with-syntax ([(a x ...) stx])
+            (values #'a #'(x ...))))))
 
 (define (do-jx e stx)
   (define (starts-with-jx? stx)
@@ -126,3 +100,11 @@
       (let* ([lst (syntax-e stx)]
              [jx (datum->syntax (car lst) '#%jx )])
         (datum->syntax stx (cons jx lst)))))
+
+;; misc utility
+(define (id-val t)
+  (syntax-local-value t (λ()#f)))
+
+(define (replace-stx-car stx a)
+  (define rst (cdr (syntax-e stx)))
+  (datum->syntax stx (cons a rst)))

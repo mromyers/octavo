@@ -1,19 +1,16 @@
 #lang racket/base
 (require (for-syntax racket/syntax syntax/parse)
          racket/syntax syntax/parse
+         "token.rkt"
          "parse.rkt")
-
-;; precedence
-(define-values (prop:precedence has-prec? prec-ref)
-  (make-struct-type-property 'precedence))
 
 (provide prec-cmp)
 (define (token-prec v)
-  (if (has-prec? v) ((prec-ref v) v) #f))
+  (if (precedence? v) ((precedence v) v) #f))
 
 (define ((prec-cmp R m) t v)
-  (and (has-prec? v)
-       (let ([n ((prec-ref v) v)])
+  (and (precedence? v)
+       (let ([n ((precedence v) v)])
          (n . R . m))))
 
 ;; 'get' functions
@@ -31,26 +28,14 @@
   (let ([stx-e (syntax-e stx)])
     (values (car stx-e) (datum->syntax stx (cdr stx-e)))))
 
-;; make infix
-(struct infix-struct (proc ex prec)
-  #:property prop:infix
-  (λ(self e stx)((infix-struct-proc self) e stx))
-  #:property prop:procedure
-  (struct-field-index ex)
-  #:property prop:precedence
-  (λ(self)(infix-struct-prec self)))
-
-(struct tag-infix-struct infix-struct ()
-  #:property prop:tag-infix 0)
-
-;; general token constructor
 (define (make-infix proc
-               #:tag        [tg   #f]
-               #:precedence [prec #f]
-               #:expand     [ex   no-expand-error])
-  (cond [tg   (tag-infix-struct proc ex prec)]
-        [else (infix-struct     proc ex prec)]))
-
+                    #:tag        [tg   #f]
+                    #:precedence [prec #f]
+                    #:expand     [ex   no-expand-error])
+  (make-token #:infix-proc proc
+              #:is-tag tg
+              #:expand ex
+              #:precedence prec))
 
 (define (no-expand-error stx)
   (raise-syntax-error #f
