@@ -28,6 +28,12 @@
   (let ([stx-e (syntax-e stx)])
     (values (car stx-e) (datum->syntax stx (cdr stx-e)))))
 
+(provide make-unary-proc)
+(define ((make-unary-proc proc) e stx)
+  (cond [e (values e (add-jx stx))]
+        [else (proc stx)]))
+
+
 (define (make-infix proc
                     #:tag        [tg   #f]
                     #:precedence [prec #f]
@@ -124,11 +130,11 @@
 (provide
  prop:precedence
  prec-cmp token-prec
-  
+
  drop-token get-cmp
  get-< get-<=
  get-none get-first
- 
+
  make-infix
  make-operator-proc make-rename-operator-proc
  make-operator make-rename-operator)

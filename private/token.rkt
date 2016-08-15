@@ -36,11 +36,11 @@
 
 (struct stmt+infix-token infix-token (sproc)
   #:property prop:statement-transformer
-  (λ(self rst)((stmt+infix-token-sproc self) rst)))
+  (λ(self stx)((stmt+infix-token-sproc self) stx)))
 
 (struct stmt+tag-infix-token tag-infix-token (sproc)
   #:property prop:statement-transformer
-  (λ(self rst)((stmt+tag-infix-token-sproc self) rst)))
+  (λ(self stx)((stmt+tag-infix-token-sproc self) stx)))
 
 
 (define (make-token #:expand     [ex   no-expand-error]
@@ -48,11 +48,12 @@
                     #:stmt-proc  [sp   #f]
                     #:precedence [prec #f]
                     #:is-tag     [tg   #f])
-  (cond [tg   (cond [sp   (stmt+tag-infix-token ex prec ip sp)]
+  (cond [sp   (cond [tg   (stmt+tag-infix-token ex prec ip sp)]
                     [else (stmt+infix-token     ex prec ip sp)])]
-        [else (cond [sp   (tag-infix-token      ex prec ip   )]
+        [else (cond [tg   (tag-infix-token      ex prec ip   )]
                     [else (infix-token          ex prec ip   )])]))
 
+(provide no-expand-error no-infix-error)
 (define (no-expand-error stx)
   (raise-syntax-error #f
     "You shouldn't be using this as a macro.\

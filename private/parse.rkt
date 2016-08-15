@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/syntax syntax/parse syntax/stx
-         racket/set
+         racket/set racket/list
          "token.rkt")
 
 ;; parsing
@@ -17,7 +17,7 @@
   (if (stx-null? stx) (values e stx)
       (let-values ([(t v stx+)(head-tok+val stx)])
         (if (and e (dom? . [t v])) (values e stx)
-            (let-values ([(e* stx*) (token-app v e stx+)])
+            (let-values ([(e* stx*) (infix-app v e stx+)])
               (parse₀ e* stx* dom?))))))
 
 (define parse-all
@@ -43,6 +43,19 @@
      (define v (syntax-local-value a* (λ() #f)))
      (values a* v stx)]
     [else (values a #f stx)]))
+
+(provide tok-val)
+(define (tok-val a)
+  (syntax-parse a
+    [(t:id z ...)
+     (define a* (add-def-ctx #'t))
+     (define v (syntax-local-value a* (λ() #f)))
+     (cond [(or (tag-infix-transformer? v) (is-intro-tag? a*)) v]
+           [else (id-val (add-def-ctx (get-tag a)))])]
+    [(x ...) (id-val (add-def-ctx (get-tag a)))]
+    [t:id (id-val (add-def-ctx a))]
+    [else #f]))
+
 
 ;; scopes
 (provide parse-def-ctx)
@@ -82,24 +95,22 @@
 
 
 ;; general token and defaults
-(define (token-app v e stx)
+(provide add-jx)
+(define (infix-app v e stx)
   (if (infix-transformer? v)
       ((infix-transformer v) v e stx)
-      (if e (values e (do-jx e stx))
+      (if e (values e (add-jx stx))
           (with-syntax ([(a x ...) stx])
             (values #'a #'(x ...))))))
 
-(define (do-jx e stx)
-  (define (starts-with-jx? stx)
-    (syntax-parse stx
-      [() #f]
-      [((~datum #%jx) x ...) #t]
-      [else #f]))
-  (if (starts-with-jx? stx)
+(define (add-jx stx)
+  (if (and (not (stx-null? stx))
+           (equal? (syntax-e (stx-car stx)) '#%jx))
       (raise-syntax-error #f "#%jx undefined")
       (let* ([lst (syntax-e stx)]
              [jx (datum->syntax (car lst) '#%jx )])
         (datum->syntax stx (cons jx lst)))))
+
 
 ;; misc utility
 (define (id-val t)
@@ -108,3 +119,46 @@
 (define (replace-stx-car stx a)
   (define rst (cdr (syntax-e stx)))
   (datum->syntax stx (cons a rst)))
+
+(define (stx-cons a stx)
+  (datum->syntax stx (cons a (syntax-e stx))))
+
+;;
+(provide parse-block get-statement)
+
+(define (parse-block stx #:get-statement [get-stmt #f])  
+  (if get-stmt
+      (parameterize ([get-statement-param get-stmt])
+        (parse-block* stx))
+      (parse-block* stx)))
+      
+(define (parse-block* stx)
+  (let loop ([stx stx])
+    (cond [(stx-null? stx) '()]
+          [else (let-values ([(stmt stx*)(get-statement stx)])
+                  (cons stmt (loop stx*)))])))
+
+(define (get-statement-default stx)
+  (define val (tok-val (stx-car stx)))
+  (cond [(statement-transformer? val)
+         ((statement-transformer val) val stx)]
+        [else 
+         (define-values (fst rst)(split-when (syntax-e stx) is-sc?))
+         (define rst* (if (null? rst) rst (cdr rst)))
+         (define stmt
+           (let ([t (datum->syntax stx '#%stmt)])
+             (datum->syntax stx (cons t fst))))
+         (values stmt (datum->syntax stx rst*))]))
+
+(define get-statement-param (make-parameter get-statement-default))
+
+(define (get-statement stx) ((get-statement-param) stx))
+
+(define (split-when lst p?)
+  (splitf-at lst (compose not p?)))
+
+(define (is-sc? a)
+  (equal? (syntax-e a) '\;))
+
+
+
